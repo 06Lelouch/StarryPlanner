@@ -1,0 +1,13 @@
+# existing…
+fastapi
+uvicorn
+icalendar
+python-dotenv
+openai
+jupyter
+requests
+
+# add for Google Calendar integration
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib

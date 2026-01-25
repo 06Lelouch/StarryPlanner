@@ -1,0 +1,22 @@
+# Secrets - NEVER commit these
+.env
+token.json
+google_client_secret.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Build artifacts
+dist/
+build/
+*.spec
+
+# Claude
+.claude/
