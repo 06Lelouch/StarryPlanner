@@ -36,6 +36,8 @@ def _ensure_creds():
                 'google_client_secret.json', SCOPES
             )
             creds = flow.run_local_server(port=0)
+            if not creds:
+                raise RuntimeError("Login was cancelled")
         with open('token.json', 'w') as token:
             token.write(creds.to_json())
     return creds

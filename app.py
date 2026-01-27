@@ -177,7 +177,7 @@ class SettingsDialog(StyledDialog):
     """
     def __init__(self, parent=None):
         super().__init__(parent, "Settings")
-        self.setFixedSize(340, 400)
+        self.setFixedSize(340, 430)
 
         v = QVBoxLayout(self)
         v.setContentsMargins(24, 24, 24, 24)
@@ -208,6 +208,10 @@ class SettingsDialog(StyledDialog):
         self.chk_always_on_top = QCheckBox("Always on top")
         self.chk_always_on_top.setChecked(False)
         v.addWidget(self.chk_always_on_top)
+
+        self.chk_auto_hide = QCheckBox("Auto-hide to icon")
+        self.chk_auto_hide.setChecked(True)
+        v.addWidget(self.chk_auto_hide)
 
         v.addSpacing(8)
 
@@ -295,6 +299,7 @@ class SettingsDialog(StyledDialog):
             "provider": self.provider.currentIndex(),  # 0 Google, 1 MS, 2 ICS
             "preview": self.chk_preview.isChecked(),
             "always_on_top": self.chk_always_on_top.isChecked(),
+            "auto_hide": self.chk_auto_hide.isChecked(),
         }
 
 
@@ -482,7 +487,11 @@ class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle(APP_NAME)
-        self.resize(320, 240)
+        screen = QGuiApplication.primaryScreen().geometry()
+        w = screen.width() // 5
+        h = screen.height() * 2 // 7
+        self.resize(w, h)
+        self.move((screen.width() - w) // 2, (screen.height() - h) // 2)
         self.setMinimumSize(200, 150)
 
         # Frameless window with rounded corners
@@ -495,13 +504,16 @@ class MainWindow(QWidget):
         self._resize_edge = None
         self.setMouseTracking(True)
 
-        # For auto-collapse when always-on-top
+        # For auto-collapse
         self._collapsed = False
         self._expanded_size = None
         self._expanded_pos = None
         self._expand_timer = QTimer(self)
         self._expand_timer.setSingleShot(True)
         self._expand_timer.timeout.connect(self._expand)
+        self._collapse_timer = QTimer(self)
+        self._collapse_timer.setSingleShot(True)
+        self._collapse_timer.timeout.connect(self._collapse)
 
         # Style children but not the main widget background (painted in paintEvent)
         self.setStyleSheet("""
@@ -511,7 +523,7 @@ class MainWindow(QWidget):
         """)
 
         # --- Menu actions (only Settings and Quit) ---
-        self.settings_values = {"provider": 0, "preview": True, "always_on_top": False}
+        self.settings_values = {"provider": 0, "preview": True, "always_on_top": True, "auto_hide": True}
 
         # Shared button style for all buttons
         button_style = """
@@ -676,16 +688,17 @@ class MainWindow(QWidget):
         painter.fillPath(path, QColor(color))
 
     def enterEvent(self, event):
-        """Expand when mouse enters and always-on-top is enabled."""
-        if self._collapsed and self.settings_values.get("always_on_top", False):
-            self._expand_timer.start(300)  # 300ms delay before expanding
+        """Expand when mouse enters and auto-hide is enabled."""
+        self._collapse_timer.stop()
+        if self._collapsed and self.settings_values.get("auto_hide", True):
+            self._expand_timer.start(300)
         super().enterEvent(event)
 
     def leaveEvent(self, event):
-        """Collapse when mouse leaves and always-on-top is enabled."""
-        self._expand_timer.stop()  # Cancel pending expand
-        if not self._collapsed and self.settings_values.get("always_on_top", False):
-            self._collapse()
+        """Collapse when mouse leaves and auto-hide is enabled."""
+        self._expand_timer.stop()
+        if not self._collapsed and self.settings_values.get("auto_hide", True):
+            self._collapse_timer.start(400)
         super().leaveEvent(event)
 
     def _get_collapse_corner(self):
@@ -764,66 +777,21 @@ class MainWindow(QWidget):
         self._anim.start()
 
     def _expand(self):
-        """Expand back to full size with animation, anchored to collapse corner."""
+        """Expand back to full size with animation, restoring original position."""
         if not self._collapsed:
             return
         self._collapsed = False
 
-        # Remove fixed size constraint for animation
+        # Capture the 48x48 start geometry BEFORE any layout changes
+        start_geo = self.geometry()
+
+        # Remove fixed size constraint
         self.setMinimumSize(48, 48)
         self.setMaximumSize(16777215, 16777215)
 
-        # Calculate target geometry based on which corner we collapsed to
-        target_size = self._expanded_size if self._expanded_size else QSize(320, 240)
-        current_geo = self.geometry()
-
-        # Get the corner info (in_top, in_left)
-        in_top, in_left = getattr(self, '_collapse_corner', (True, True))
-
-        # Expand from the corner we collapsed to
-        if in_top and in_left:
-            # Top-left: anchor top-left, expand right and down
-            target_x = current_geo.x()
-            target_y = current_geo.y()
-        elif in_top and not in_left:
-            # Top-right: anchor top-right, expand left and down
-            target_x = current_geo.x() + current_geo.width() - target_size.width()
-            target_y = current_geo.y()
-        elif not in_top and in_left:
-            # Bottom-left: anchor bottom-left, expand right and up
-            target_x = current_geo.x()
-            target_y = current_geo.y() + current_geo.height() - target_size.height()
-        else:
-            # Bottom-right: anchor bottom-right, expand left and up
-            target_x = current_geo.x() + current_geo.width() - target_size.width()
-            target_y = current_geo.y() + current_geo.height() - target_size.height()
-
-        target = QRect(target_x, target_y, target_size.width(), target_size.height())
-
-        # Animate expand
-        self._anim = QPropertyAnimation(self, b"geometry")
-        self._anim.setDuration(250)
-        self._anim.setStartValue(self.geometry())
-        self._anim.setEndValue(target)
-        self._anim.setEasingCurve(QEasingCurve.OutCubic)
-        self._anim.finished.connect(self._on_expand_finished)
-        self._anim.start()
-
-    def _on_expand_finished(self):
-        """Called when expand animation finishes."""
-        # Restore margins
+        # Restore layout so content is in final position during animation
         self.layout().setContentsMargins(16, 16, 16, 16)
-
-        # Set proper size constraints
-        self.setMinimumSize(200, 150)
-        self.setMaximumSize(16777215, 16777215)
-
-        # Save current position/size for next collapse
-        self._expanded_size = self.size()
-        self._expanded_pos = self.pos()
-
-        # Restore + button
-        self.btn_ai.setIcon(QIcon())  # Clear icon
+        self.btn_ai.setIcon(QIcon())
         self.btn_ai.setText("+")
         self.btn_ai.setFixedSize(64, 64)
         self.btn_ai.setStyleSheet("""
@@ -842,8 +810,59 @@ class MainWindow(QWidget):
                 background-color: #1c1c1e;
             }
         """)
+        self.btn_settings.show()
+        self.btn_ai.show()
 
-        # Show all content
+        # Force back to 48x48 start position (undo any Qt auto-resize)
+        self.setGeometry(start_geo)
+
+        # Animate from captured start to target
+        target_size = self._expanded_size if self._expanded_size else QSize(320, 240)
+        target_pos = self._expanded_pos if self._expanded_pos else self.pos()
+        target = QRect(target_pos, target_size)
+        self._anim = QPropertyAnimation(self, b"geometry")
+        self._anim.setDuration(250)
+        self._anim.setStartValue(start_geo)
+        self._anim.setEndValue(target)
+        self._anim.setEasingCurve(QEasingCurve.OutCubic)
+        self._anim.finished.connect(self._on_expand_finished)
+        self._anim.start()
+
+    def _on_expand_finished(self):
+        """Called when expand animation finishes."""
+        self.setMinimumSize(200, 150)
+        self.setMaximumSize(16777215, 16777215)
+
+    def _snap_expand(self):
+        """Instantly restore to expanded state (no animation)."""
+        if not self._collapsed:
+            return
+        self._collapsed = False
+        self.setMinimumSize(200, 150)
+        self.setMaximumSize(16777215, 16777215)
+        target_size = self._expanded_size if self._expanded_size else QSize(320, 240)
+        target_pos = self._expanded_pos if self._expanded_pos else self.pos()
+        self.setGeometry(QRect(target_pos, target_size))
+        self.layout().setContentsMargins(16, 16, 16, 16)
+        self.btn_ai.setIcon(QIcon())
+        self.btn_ai.setText("+")
+        self.btn_ai.setFixedSize(64, 64)
+        self.btn_ai.setStyleSheet("""
+            QPushButton {
+                font-size: 32px;
+                font-weight: 300;
+                border-radius: 12px;
+                background-color: #2c2c2e;
+                color: #ffffff;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #3a3a3c;
+            }
+            QPushButton:pressed {
+                background-color: #1c1c1e;
+            }
+        """)
         self.btn_settings.show()
         self.btn_ai.show()
         self.update()
@@ -855,9 +874,13 @@ class MainWindow(QWidget):
         dlg.provider.setCurrentIndex(self.settings_values.get("provider", 0))
         dlg.chk_preview.setChecked(self.settings_values.get("preview", True))
         dlg.chk_always_on_top.setChecked(self.settings_values.get("always_on_top", False))
+        dlg.chk_auto_hide.setChecked(self.settings_values.get("auto_hide", True))
         if dlg.exec() == QDialog.Accepted:
             self.settings_values = dlg.get_values()
             self._apply_always_on_top()
+            # If auto-hide was just disabled and we're collapsed, snap back instantly
+            if not self.settings_values.get("auto_hide", True) and self._collapsed:
+                self._snap_expand()
             self.toast("Settings saved")
 
     def _apply_always_on_top(self):
@@ -865,9 +888,6 @@ class MainWindow(QWidget):
         if self.settings_values.get("always_on_top", False):
             self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
         else:
-            # Expand if currently collapsed when turning off always-on-top
-            if self._collapsed:
-                self._expand()
             self.setWindowFlags(self.windowFlags() & ~Qt.WindowStaysOnTopHint)
         self.show()
 

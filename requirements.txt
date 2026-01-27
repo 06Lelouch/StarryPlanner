@@ -6,6 +6,8 @@ python-dotenv
 openai
 jupyter
 requests
+PySide6
+pytz
 
 # add for Google Calendar integration
 google-api-python-client
