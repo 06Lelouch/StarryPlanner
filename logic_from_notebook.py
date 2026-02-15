@@ -1,5 +1,5 @@
 # ---- 1. Imports ----
-import os, json, pytz
+import sys, os, json, pytz
 from datetime import datetime
 from typing import Tuple, List
 from openai import OpenAI
@@ -12,8 +12,15 @@ from validation import (
     ValidationWarning,
 )
 
+# ---- 1b. Path helper for PyInstaller bundled .exe ----
+def _base_path():
+    """Return the directory where the app lives (works for dev and .exe)."""
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
 # ---- 2. Load environment and initialize client ----
-load_dotenv()
+load_dotenv(os.path.join(_base_path(), '.env'))
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 assert client.api_key, "OPENAI_API_KEY not found in environment"
 print("Loaded OpenAI key, length:", len(client.api_key))

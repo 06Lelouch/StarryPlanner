@@ -1,4 +1,5 @@
 from __future__ import annotations
+import sys, os
 from dateutil import tz
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -7,15 +8,21 @@ from google.auth.transport.requests import Request
 
 SCOPES = ['https://www.googleapis.com/auth/calendar.events']
 
+def _base_path():
+    """Return the directory where the app lives (works for dev and .exe)."""
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(os.path.join(__file__, '..')))
+
 def is_authenticated() -> bool:
     """Check if valid Google credentials exist without triggering OAuth."""
     try:
-        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+        creds = Credentials.from_authorized_user_file(os.path.join(_base_path(), 'token.json'), SCOPES)
         if creds and creds.valid:
             return True
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
-            with open('token.json', 'w') as token:
+            with open(os.path.join(_base_path(), 'token.json'), 'w') as token:
                 token.write(creds.to_json())
             return True
         return False
@@ -25,7 +32,7 @@ def is_authenticated() -> bool:
 def _ensure_creds():
     creds = None
     try:
-        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+        creds = Credentials.from_authorized_user_file(os.path.join(_base_path(), 'token.json'), SCOPES)
     except Exception:
         creds = None
     if not creds or not creds.valid:
@@ -33,12 +40,12 @@ def _ensure_creds():
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(
-                'google_client_secret.json', SCOPES
+                os.path.join(_base_path(), 'google_client_secret.json'), SCOPES
             )
             creds = flow.run_local_server(port=0)
             if not creds:
                 raise RuntimeError("Login was cancelled")
-        with open('token.json', 'w') as token:
+        with open(os.path.join(_base_path(), 'token.json'), 'w') as token:
             token.write(creds.to_json())
     return creds
 
