@@ -2,12 +2,7 @@
 from pathlib import Path
 from datetime import datetime
 import sys, os, json
-
-def _base_path():
-    """Return the directory where the app lives (works for dev and .exe)."""
-    if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
+from utils import base_path
 
 from PySide6.QtCore import Qt, QUrl, QTimer, QPropertyAnimation, QEasingCurve, QRect, QSize
 from PySide6.QtGui import QAction, QDesktopServices, QGuiApplication, QPainter, QColor, QPainterPath, QPixmap, QIcon, QPen
@@ -292,7 +287,7 @@ class SettingsDialog(StyledDialog):
 
     def sign_out_google(self):
         import os
-        token_path = os.path.join(_base_path(), "token.json")
+        token_path = os.path.join(base_path(), "token.json")
         if os.path.exists(token_path):
             os.remove(token_path)
             StyledMessageBox.information(self, "Signed Out", "Google account disconnected.")
