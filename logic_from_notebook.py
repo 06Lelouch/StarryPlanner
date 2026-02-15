@@ -69,7 +69,7 @@ def extract_slots(nl: str, now_iso: str, tzname: str) -> dict:
     )
 
     resp = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model="gpt-5.2-mini",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": nl},
