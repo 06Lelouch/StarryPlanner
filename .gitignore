@@ -1,4 +1,4 @@
-# Secrets - NEVER commit these
+# secret
 .env
 token.json
 google_client_secret.json
